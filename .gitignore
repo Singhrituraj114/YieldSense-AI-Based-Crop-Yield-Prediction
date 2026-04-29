@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.DS_Store
+*.pkl
+shap_test_visualization.png
+COLOR_FIX.md
+COLORS_FIXED.md
+FIXES_COMPLETE.md
+check_data.py
+generate_crop_data.py
+test_shap_integration.py
