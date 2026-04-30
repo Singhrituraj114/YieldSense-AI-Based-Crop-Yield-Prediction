@@ -74,7 +74,7 @@ Season values:
 Current file shape:
 
 - Rows: `246,091`
-- Columns: `7`
+- Columns: `8`
 
 Columns:
 
@@ -86,6 +86,7 @@ Columns:
 | `Season` | string | Farming season | 0 |
 | `Crop` | string | Crop name | 0 |
 | `Area` | float | Cultivated area (hectares) | 0 |
+| `Rainfall` | float | Annual rainfall (mm) | 0 |
 | `Production` | float | Production quantity | 3,730 |
 
 Additional observed dataset facts:
@@ -110,8 +111,8 @@ The app builds exactly this feature vector (in order):
 
 Important:
 
-- `Rainfall` is **user-provided** in the app at inference time.
-- `crop_production.csv` currently has `Production` but no `Rainfall`; in this repo the CSV is used primarily for state-district availability filtering.
+- `Rainfall` is part of the dataset schema in `crop_production.csv` and part of model inputs.
+- In the current app flow, rainfall remains editable from UI for scenario testing before prediction.
 
 ## 5. Feature engineering and inference pipeline (implemented in `app.py`)
 
@@ -277,6 +278,7 @@ Dependencies (`requirements.txt`):
 | `Season` | text | 6 | `Autumn`, `Kharif`, `Rabi`, `Summer`, `Whole Year`, `Winter` |
 | `Crop` | text | 124 | Crop category/value used for encoding |
 | `Area` | hectares | 38,442 | Observed min 0.04, max 8,580,100 |
+| `Rainfall` | mm | - | Rainfall feature column used in prediction pipeline |
 | `Production` | production quantity | 51,627 | 3,730 missing values |
 
 ### 13.2 Inference columns (model input row)
@@ -289,7 +291,7 @@ Dependencies (`requirements.txt`):
 | `Season` | int (label-encoded) | UI season selection |
 | `Crop` | int (label-encoded) | UI crop selection |
 | `Area` | float | UI area input |
-| `Rainfall` | float | UI rainfall input |
+| `Rainfall` | float | `crop_production.csv` column (editable in UI at inference time) |
 
 ## 14. End-to-end execution lifecycle
 
