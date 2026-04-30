@@ -149,7 +149,15 @@ This is the exact runtime pipeline:
 
 ### 6.1 SHAP local explanation
 
-Implemented with `shap.TreeExplainer(model)`:
+SHAP (SHapley Additive exPlanations) explains one prediction by distributing the final output into feature-wise contributions.
+
+Think of the prediction as:
+
+```text
+final_prediction = base_value + contribution_from_state + contribution_from_district + ... + contribution_from_rainfall
+```
+
+Implemented with `shap.TreeExplainer(model)` in this app:
 
 1. Compute `shap_values` for the single inference row.
 2. Handle SHAP return shape safely (`list` or `ndarray`).
@@ -160,6 +168,20 @@ Implemented with `shap.TreeExplainer(model)`:
    - Direction (`increases`/`decreases`)
 4. Display base value (`explainer.expected_value`) and cumulative contribution breakdown.
 
+How to interpret each SHAP value:
+
+- **Positive SHAP**: feature pushed predicted yield upward.
+- **Negative SHAP**: feature pushed predicted yield downward.
+- **Larger absolute SHAP**: stronger influence on this specific prediction.
+- **Near zero SHAP**: little local influence for this row.
+
+Why this is powerful:
+
+- It is **local** and context-aware.  
+  Example: rainfall can increase prediction for one crop-season-state combination but have weaker or opposite effect for another.
+- It provides auditability for each forecast instead of only a single black-box number.
+- It allows agronomic discussion around *which factors mattered most* for that exact scenario.
+
 ### 6.2 SHAP visual output in app
 
 The app provides four explainability tabs:
@@ -168,6 +190,11 @@ The app provides four explainability tabs:
 2. **Prediction Breakdown**: base value vs final prediction + stepwise cumulative effects
 3. **Feature Impact**: horizontal bar chart of absolute SHAP values
 4. **Global Importance**: model-wide feature importances from `model.feature_importances_`
+
+Important distinction:
+
+- Tabs 1-3 are **local explanation** (for the current user input only).
+- Tab 4 is **global model behavior** (average split importance across many trees).
 
 ### 6.3 Verified global feature importances
 
@@ -363,19 +390,34 @@ Where:
 - each SHAP value = signed contribution of one feature for this prediction
 - absolute SHAP values are used for ranking contribution strength
 
+Interpretation rule of thumb:
+
+1. Start at `base_value`.
+2. Add all positive SHAP values (features raising yield).
+3. Add all negative SHAP values (features lowering yield).
+4. Result equals the final predicted yield.
+
+This additive consistency is why SHAP is easy to explain to non-ML stakeholders.
+
 ## 19. Explainability outputs in UI
 
 1. **Feature Contribution tab**  
-   Ranked table with feature value, absolute SHAP impact, and impact direction.
+   Ranked table with feature value, absolute SHAP impact, and impact direction (`increases`/`decreases`).
 
 2. **Prediction Breakdown tab**  
-   Displays final prediction, SHAP base value, and cumulative feature contributions.
+   Displays final prediction, SHAP base value, and cumulative feature contributions from baseline to final output.
 
 3. **Feature Impact tab**  
-   Horizontal chart of top absolute SHAP effects for the current row.
+   Horizontal chart of top absolute SHAP effects for the current row (magnitude-first view).
 
 4. **Global Importance tab**  
-   `model.feature_importances_` across all training trees (global, not local).
+   `model.feature_importances_` across all training trees (global, not local SHAP).
+
+Common interpretation mistakes to avoid:
+
+- High global importance does **not** always mean high local SHAP for every row.
+- SHAP direction is row-specific; the same feature may push up in one case and down in another.
+- Absolute SHAP rank shows strength, while signed SHAP shows direction.
 
 ## 20. Data quality and distribution notes
 
