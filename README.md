@@ -1,205 +1,427 @@
-# YieldSense AI Based Crop Yield Prediction with Weather Integration
+# YieldSense AI-Based Crop Yield Prediction
 
-YieldSense AI is a Streamlit application that predicts crop yield (quintals/hectare) using a trained **RandomForestRegressor** and explains each prediction with **SHAP**.
+A Streamlit-based crop yield prediction system using a pretrained Random Forest model, categorical encoders, and SHAP-based explainability.
 
-It combines geography (state/district), crop context (crop/season/year), farm size (area), and weather signal (rainfall) into one prediction pipeline and presents both local (per-prediction) and global (model-level) feature impact.
+## 1. Repository purpose
 
-## 1. Project introduction
+This repository provides an inference-ready application for crop yield prediction with:
 
-The goal is to support data-driven agricultural decisions by estimating expected yield before harvest.  
-The app is designed for interactive use: choose region + crop + season + environmental values, then immediately see:
+- Geographic context (state + district)
+- Crop and season context
+- Land area and rainfall inputs
+- Explainability using SHAP (local) + feature importance (global)
 
-1. Predicted yield
-2. Confidence/uncertainty estimate
-3. SHAP-based feature contributions
+The app predicts yield in **quintals per hectare (q/ha)**.
 
-## 2. Repository structure and role of each file
+## 2. Current implementation scope
 
-| File | Purpose |
-|---|---|
-| `app.py` | Main Streamlit app (UI + prediction + SHAP explainability) |
-| `crop_production.csv` | Source agricultural records used for state-district filtering and reference data |
-| `*.pkl` model artifacts | Required locally for runtime predictions (not tracked in GitHub) |
-| `requirements.txt` | Python dependencies |
+What is included:
 
-## 3. Data depth: all columns and how they work
+- Full Streamlit UI and inference logic (`app.py`)
+- Trained model artifact and label encoders (`*.pkl`) in local workspace
+- Dataset used by app for state-district filtering (`crop_production.csv`)
+- SHAP integration test script (`test_shap_integration.py`)
 
-### 3.1 `crop_production.csv` schema
+What is not included:
 
-The raw CSV contains **246,091 rows** and these columns:
+- A model training script/notebook in this repository
+- A committed model artifact in Git history (`*.pkl` is ignored by `.gitignore`)
 
-| Column | Type | Meaning | Used in app |
-|---|---|---|---|
-| `State_Name` | Categorical (string) | State/UT name | Yes (filter + model input via encoder) |
-| `District_Name` | Categorical (string) | District name | Yes (filter + model input via encoder) |
-| `Crop_Year` | Numeric (int) | Year of crop record | Yes (model input) |
-| `Season` | Categorical (string) | Growing season | Yes (model input via encoder) |
-| `Crop` | Categorical (string) | Crop type | Yes (model input via encoder) |
-| `Area` | Numeric (float) | Cultivated area in hectares | Yes (model input) |
-| `Production` | Numeric (float) | Total production in raw data | Not direct input in UI model prediction |
+## 3. Verified model/artifact metadata
 
-### 3.2 Cardinality/ranges (from current dataset)
+Extracted from local model artifacts:
 
-- States: **33**
-- Districts: **646**
-- Crops: **124**
-- Seasons: **6**
-- Year range in CSV: **1997 to 2015**
-- Area range: **0.04 to 8,580,100.0**
-- Production range: **0.0 to 1,250,800,000.0**
+- **Model**: `RandomForestRegressor` (`sklearn.ensemble._forest`)
+- **n_estimators**: `100`
+- **criterion**: `squared_error`
+- **max_depth**: `None`
+- **random_state**: `42`
+- **bootstrap**: `True`
+- **Input features**: `7`
 
-### 3.3 Model input columns (final features used for prediction)
+### 3.1 Encoder coverage
 
-The model expects exactly these **7 features** in this order:
+| Encoder | Classes |
+|---|---:|
+| State | 33 |
+| District | 646 |
+| Crop | 124 |
+| Season | 6 |
 
-1. `State_Name` (encoded)
-2. `District_Name` (encoded)
-3. `Crop_Year`
-4. `Season` (encoded)
-5. `Crop` (encoded)
-6. `Area`
-7. `Rainfall`
+Season values:
 
-> Note: `Rainfall` is user-provided in the app and is part of the trained model feature set.  
-> `Production` exists in the source CSV but is not passed as a model input feature in `app.py`.
+- `Autumn`
+- `Kharif`
+- `Rabi`
+- `Summer`
+- `Whole Year`
+- `Winter`
 
-## 4. End-to-end prediction flow (depth)
+### 3.2 Artifact sizes (local)
 
-### 4.1 Model and encoders loading
+| File | Size |
+|---|---:|
+| `yieldsense_model.pkl` | 1,647,378,801 bytes |
+| `yieldsense_le_state.pkl` | 1,089 bytes |
+| `yieldsense_le_district.pkl` | 11,633 bytes |
+| `yieldsense_le_crop.pkl` | 2,539 bytes |
+| `yieldsense_le_season.pkl` | 598 bytes |
 
-`app.py` uses Streamlit caching:
+## 4. Data and schema details
 
-- `@st.cache_resource` for model/encoders and SHAP explainer
-- `@st.cache_data` for CSV data
+### 4.1 `crop_production.csv` (repository dataset)
 
-Loaded artifacts:
+Current file shape:
 
-- `yieldsense_model.pkl`
-- 4 label encoders (`state`, `district`, `crop`, `season`)
-- These artifacts are kept local and not committed to GitHub.
+- Rows: `246,091`
+- Columns: `7`
 
-### 4.2 Geography filtering logic
+Columns:
 
-District options are **state-dependent**:
+| Column | Type (observed) | Description | Missing |
+|---|---|---|---:|
+| `State_Name` | string | State/UT name | 0 |
+| `District_Name` | string | District name | 0 |
+| `Crop_Year` | int | Crop year | 0 |
+| `Season` | string | Farming season | 0 |
+| `Crop` | string | Crop name | 0 |
+| `Area` | float | Cultivated area (hectares) | 0 |
+| `Production` | float | Production quantity | 3,730 |
 
-1. User chooses a state.
-2. App filters `crop_production.csv` rows for that state.
-3. Extracted districts are cross-checked against encoder classes.
-4. Only valid districts are shown in the district dropdown.
+Additional observed dataset facts:
 
-This prevents invalid state-district pairs from being sent to the model.
+- `Crop_Year` range: `1997` to `2015`
+- Unique states: `33`
+- Unique districts: `646`
+- Unique crops: `124`
+- Unique seasons: `6`
 
-### 4.3 Input normalization + encoding
+### 4.2 Model input schema (runtime inference)
 
-Before prediction:
+The app builds exactly this feature vector (in order):
 
-- State: lowercased for matching `le_state.classes_`
-- District: transformed to uppercase for matching `le_district.classes_`
-- Crop/Season: title-cased for matching corresponding encoders
-- Area and Rainfall: required to be `> 0`
+1. `State_Name` (encoded integer)
+2. `District_Name` (encoded integer)
+3. `Crop_Year` (numeric)
+4. `Season` (encoded integer)
+5. `Crop` (encoded integer)
+6. `Area` (float, hectares)
+7. `Rainfall` (float, mm)
 
-Then categorical fields are converted to numeric IDs by label encoders.
+Important:
 
-### 4.4 Prediction execution
+- `Rainfall` is **user-provided** in the app at inference time.
+- `crop_production.csv` currently has `Production` but no `Rainfall`; in this repo the CSV is used primarily for state-district availability filtering.
 
-The app builds a one-row DataFrame:
+## 5. Feature engineering and inference pipeline (implemented in `app.py`)
+
+This is the exact runtime pipeline:
+
+1. **Load artifacts**
+   - Load model + 4 encoders using `joblib`.
+   - Load `crop_production.csv`.
+2. **Normalize geographic text**
+   - `State_Name` and `District_Name` from CSV are normalized to lowercase and stripped.
+3. **State-to-district filtering**
+   - Selected state filters district options from CSV.
+   - District list is additionally filtered to values that exist in district encoder classes.
+4. **User input capture**
+   - State, district, crop, season, area, rainfall, crop year.
+5. **Input validation**
+   - `area > 0`
+   - `rainfall > 0`
+   - selected values must exist in encoder vocabularies.
+6. **Categorical encoding**
+   - `state` encoded from lowercase form.
+   - `district` encoded from uppercase form.
+   - `crop` and `season` encoded from title-case form.
+7. **Feature vector assembly**
+   - Build one-row DataFrame with the 7 model features in expected order.
+8. **Prediction**
+   - `model.predict(input_data)[0]` => predicted yield (`q/ha`).
+9. **Uncertainty proxy**
+   - Per-tree predictions are collected from `model.estimators_`.
+   - Standard deviation of tree predictions is shown as model uncertainty.
+   - Confidence score displayed as `max(0, 100 - std * 10)`.
+
+## 6. Explainability pipeline (SHAP + model importance)
+
+### 6.1 SHAP local explanation
+
+Implemented with `shap.TreeExplainer(model)`:
+
+1. Compute `shap_values` for the single inference row.
+2. Handle SHAP return shape safely (`list` or `ndarray`).
+3. Build contribution table with:
+   - Feature
+   - Input value
+   - Absolute SHAP impact
+   - Direction (`increases`/`decreases`)
+4. Display base value (`explainer.expected_value`) and cumulative contribution breakdown.
+
+### 6.2 SHAP visual output in app
+
+The app provides four explainability tabs:
+
+1. **Feature Contribution**: ranked SHAP impact table
+2. **Prediction Breakdown**: base value vs final prediction + stepwise cumulative effects
+3. **Feature Impact**: horizontal bar chart of absolute SHAP values
+4. **Global Importance**: model-wide feature importances from `model.feature_importances_`
+
+### 6.3 Verified global feature importances
+
+From the trained model artifact:
+
+| Feature | Importance |
+|---|---:|
+| `Crop` | 0.643836 |
+| `Season` | 0.103516 |
+| `State_Name` | 0.103257 |
+| `Area` | 0.055292 |
+| `Rainfall` | 0.044816 |
+| `Crop_Year` | 0.025055 |
+| `District_Name` | 0.024230 |
+
+## 7. Application workflow diagram
 
 ```text
-['State_Name', 'District_Name', 'Crop_Year', 'Season', 'Crop', 'Area', 'Rainfall']
+User Inputs
+(State, District, Crop, Season, Area, Rainfall, Year)
+        |
+        v
+Input validation + normalization
+        |
+        v
+Label encoding (state/district/crop/season)
+        |
+        v
+Assemble model feature row (7 columns)
+        |
+        v
+RandomForestRegressor prediction (q/ha)
+        |
+        +--> Uncertainty estimate from per-tree std
+        |
+        +--> SHAP TreeExplainer local interpretation
 ```
 
-and calls:
+## 8. File-by-file technical map
 
-```python
-prediction = model.predict(input_data)[0]
-```
+| File | Role |
+|---|---|
+| `app.py` | Streamlit UI, prediction flow, validation, SHAP, charts |
+| `crop_production.csv` | Dataset used by app for state-district filtering and metadata context |
+| `requirements.txt` | Python dependencies |
+| `test_shap_integration.py` | Script to validate SHAP integration end-to-end |
+| `check_data.py` | Prints encoder-supported states/district samples |
+| `generate_crop_data.py` | Generates state-district CSV based on encoder classes and mapping |
+| `shap_test_visualization.png` | SHAP test chart artifact |
 
-Output unit displayed: **q/ha (quintals per hectare)**.
-
-### 4.5 Confidence / uncertainty shown in UI
-
-For the Random Forest:
-
-1. Prediction from each decision tree is collected.
-2. Standard deviation of tree outputs is treated as uncertainty.
-3. Confidence score is derived as:
-
-```python
-confidence_score = max(0, 100 - (std_dev * 10))
-```
-
-This gives a user-friendly confidence percentage plus raw uncertainty value.
-
-## 5. SHAP explainability: full breakdown
-
-YieldSense uses `shap.TreeExplainer(model)` for tree-based explainability.
-
-For a single prediction:
-
-1. Compute SHAP values for each feature.
-2. Compare feature contributions against the base value (`expected_value`).
-3. Present impact direction and magnitude.
-
-The app exposes SHAP in four tabs:
-
-1. **Feature Contribution**  
-   Data table of feature value, absolute SHAP impact, and direction (increase/decrease).
-
-2. **Prediction Breakdown**  
-   Shows base value vs final prediction and cumulative contribution steps.
-
-3. **Feature Impact**  
-   Horizontal bar chart of absolute SHAP magnitudes for this single prediction.
-
-4. **Global Importance**  
-   Uses `model.feature_importances_` to show model-wide importance across training.
-
-### Local vs Global (important difference)
-
-- **SHAP (local):** explains *this specific prediction*.
-- **Feature importance (global):** explains what the model generally relies on across many predictions.
-
-## 6. Model details
-
-- Model class: **`RandomForestRegressor`**
-- Number of trees: **100**
-- Feature count: **7**
-- Explainability method: **SHAP TreeExplainer**
-
-## 7. Run locally
+## 9. Setup and run
 
 ```powershell
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Default app URL:
+App URL (default): `http://localhost:8501`
 
-```text
-http://localhost:8501
+## 10. Utility scripts
+
+Run SHAP integration test:
+
+```powershell
+python test_shap_integration.py
 ```
 
-## 8. Local runtime artifacts required
+Inspect encoder coverage:
 
-To run predictions, place these files next to `app.py` on your machine:
+```powershell
+python check_data.py
+```
 
-1. `yieldsense_model.pkl`
-2. `yieldsense_le_state.pkl`
-3. `yieldsense_le_district.pkl`
-4. `yieldsense_le_crop.pkl`
-5. `yieldsense_le_season.pkl`
+Regenerate state-district mapping CSV:
 
-## 9. Practical notes and constraints
+```powershell
+python generate_crop_data.py
+```
 
-- The model file is large (`~1.65 GB`), so initial load can take time.
-- Prediction is scoped to the encoded classes available in shipped encoder files.
-- UI year input currently allows **1997–2030**, while source CSV historical years go up to 2015.
+## 11. Known constraints and implementation notes
 
-## 10. Tech stack
+1. Model artifacts are large and ignored by Git (`*.pkl` in `.gitignore`), so clone-only environments need local artifact provisioning.
+2. The app supports prediction years `1997` to `2030` in UI, while observed CSV years are `1997` to `2015`.
+3. Training code is not present; runtime behavior is fully documented here from the deployed artifacts and app logic.
+4. `theme_mode` option in sidebar is currently a UI setting placeholder and does not switch a separate CSS theme pipeline in code.
 
-- Python
-- Streamlit
-- scikit-learn
-- SHAP
-- pandas / numpy
-- matplotlib
+## 12. Reproducible environment
+
+Dependencies (`requirements.txt`):
+
+- `streamlit>=1.28.0`
+- `joblib>=1.3.0`
+- `pandas>=2.0.0`
+- `numpy>=1.24.0`
+- `scikit-learn>=1.3.0`
+- `shap>=0.42.0`
+- `matplotlib>=3.7.0`
+
+## 13. A-to-Z column reference
+
+### 13.1 Training-style source columns (`crop_production.csv`)
+
+| Column | Unit | Unique Values | Notes |
+|---|---|---:|---|
+| `State_Name` | text | 33 | State/UT, normalized to lowercase in app |
+| `District_Name` | text | 646 | District, normalized to lowercase in app |
+| `Crop_Year` | year | 19 | Observed range 1997-2015 |
+| `Season` | text | 6 | `Autumn`, `Kharif`, `Rabi`, `Summer`, `Whole Year`, `Winter` |
+| `Crop` | text | 124 | Crop category/value used for encoding |
+| `Area` | hectares | 38,442 | Observed min 0.04, max 8,580,100 |
+| `Production` | production quantity | 51,627 | 3,730 missing values |
+
+### 13.2 Inference columns (model input row)
+
+| Feature | Type passed to model | Source |
+|---|---|---|
+| `State_Name` | int (label-encoded) | UI state selection |
+| `District_Name` | int (label-encoded) | UI district selection |
+| `Crop_Year` | numeric | UI year input |
+| `Season` | int (label-encoded) | UI season selection |
+| `Crop` | int (label-encoded) | UI crop selection |
+| `Area` | float | UI area input |
+| `Rainfall` | float | UI rainfall input |
+
+## 14. End-to-end execution lifecycle
+
+1. App bootstraps Streamlit page and CSS theme.
+2. Model and encoders are loaded once using `@st.cache_resource`.
+3. CSV is loaded once using `@st.cache_data`.
+4. User selects state; district list is filtered from CSV for that state.
+5. User fills crop, season, area, rainfall, and year.
+6. App validates values and vocabulary membership.
+7. Categorical fields are encoded with persisted label encoders.
+8. One-row DataFrame is created with model feature order.
+9. Model predicts yield.
+10. Tree-level prediction spread is used as an uncertainty proxy.
+11. SHAP values are generated and rendered in multiple explanation views.
+
+## 15. Input constraints and defaults (from code)
+
+| Input | Widget | Default | Constraint |
+|---|---|---:|---|
+| State | `selectbox` | First sorted state | Must exist in state encoder classes |
+| District | `selectbox` | First filtered district | Must belong to selected state and district encoder |
+| Crop | `selectbox` | First sorted crop | Must exist in crop encoder classes |
+| Season | `selectbox` | First sorted season | Must exist in season encoder classes |
+| Area | `number_input` | 1.0 | Must be `> 0` |
+| Rainfall | `number_input` | 500.0 | Must be `> 0` |
+| Crop Year | `number_input` | Current year | Min 1997, max 2030 |
+
+## 16. Encoding and normalization rules
+
+- State from UI: shown as title case, converted to lowercase for matching and encoding.
+- District from UI: shown as title case, converted to lowercase for display logic, transformed to uppercase for encoder lookup.
+- Crop and Season: shown as title case and encoded in title case.
+- CSV values are normalized to lowercase (`state`, `district`) for filtering logic.
+
+These case conversions are required because saved encoder vocabularies use mixed canonical formats.
+
+## 17. Prediction and uncertainty formulas
+
+Prediction:
+
+```text
+yield_q_per_ha = model.predict(X)[0]
+```
+
+Uncertainty proxy:
+
+```text
+tree_preds = [tree.predict(X)[0] for tree in model.estimators_]
+uncertainty = std(tree_preds)
+confidence_score = max(0, 100 - uncertainty * 10)
+```
+
+Interpretation:
+
+- Lower `uncertainty` means tree models agree more.
+- Higher `confidence_score` means tighter ensemble agreement.
+
+## 18. SHAP mathematics used in app
+
+For a single prediction:
+
+```text
+prediction = base_value + sum(feature_shap_values)
+```
+
+Where:
+
+- `base_value` = model expected output from `TreeExplainer`
+- each SHAP value = signed contribution of one feature for this prediction
+- absolute SHAP values are used for ranking contribution strength
+
+## 19. Explainability outputs in UI
+
+1. **Feature Contribution tab**  
+   Ranked table with feature value, absolute SHAP impact, and impact direction.
+
+2. **Prediction Breakdown tab**  
+   Displays final prediction, SHAP base value, and cumulative feature contributions.
+
+3. **Feature Impact tab**  
+   Horizontal chart of top absolute SHAP effects for the current row.
+
+4. **Global Importance tab**  
+   `model.feature_importances_` across all training trees (global, not local).
+
+## 20. Data quality and distribution notes
+
+- `Production` has missing values (3,730 rows).
+- Derived yield (`Production / Area`) has strong skew/outliers:
+  - count: 242,361
+  - mean: 41.6491
+  - median: 1.0
+  - p95: 22.4483
+  - min: 0.0
+  - max: 88,000.0
+
+This indicates a heavy-tailed target distribution and possible outlier-driven behavior.
+
+## 21. Operational considerations
+
+1. Model artifact is large (~1.65 GB); startup and memory usage depend on host capacity.
+2. Cloud deployment with strict memory limits may require model compression or external model serving.
+3. Encoder files must always match the model version; mismatches can cause invalid class lookups.
+4. Because training code is absent in this repo, retraining reproducibility is currently out of scope.
+
+## 22. Troubleshooting (technical)
+
+### 22.1 Artifact errors
+
+- If any `.pkl` file is missing or renamed, app stops with load error.
+- Keep model and all 4 encoders in project root beside `app.py`.
+
+### 22.2 Invalid category errors
+
+- Happens when input value is not present in the corresponding encoder classes.
+- Ensure dataset/encoder versions are synchronized.
+
+### 22.3 SHAP issues
+
+- SHAP can fail for incompatible package versions or model serialization edge cases.
+- Use versions from `requirements.txt` and verify with `test_shap_integration.py`.
+
+### 22.4 Performance bottlenecks
+
+- First run cost: artifact load + SHAP initialization.
+- Subsequent runs benefit from Streamlit cache decorators.
+
+## 23. Suggested production hardening (future work)
+
+1. Add explicit model metadata file (version, trained date, feature spec hash).
+2. Add schema validator for all inference inputs before prediction.
+3. Add drift/outlier monitoring for rainfall, area, and categorical frequencies.
+4. Add quantile prediction intervals (instead of std-based proxy only).
+5. Add artifact checksum verification on startup.
+
