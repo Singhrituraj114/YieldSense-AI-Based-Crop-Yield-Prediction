@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import joblib
 import pandas as pd
@@ -1024,7 +1025,10 @@ st.markdown(custom_css, unsafe_allow_html=True)
 @st.cache_resource
 def load_model_and_encoders():
     try:
-        model     = joblib.load("yieldsense_model.pkl")
+        # Prefer the full local model if present (kept out of git for size reasons);
+        # falls back to the smaller repo-tracked model used in hosted deployments.
+        model_path = "yieldsense_model_full.pkl" if os.path.exists("yieldsense_model_full.pkl") else "yieldsense_model.pkl"
+        model     = joblib.load(model_path)
         le_state  = joblib.load("yieldsense_le_state.pkl")
         le_district = joblib.load("yieldsense_le_district.pkl")
         le_crop   = joblib.load("yieldsense_le_crop.pkl")

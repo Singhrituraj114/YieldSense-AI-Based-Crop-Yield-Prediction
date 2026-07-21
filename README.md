@@ -250,15 +250,22 @@ Answers: **Which features matter most overall in the trained model?**
 ## 8) Model and encoder artifact facts (loaded runtime values)
 
 - Model type: `RandomForestRegressor`
-- Number of trees: `100`
+- Number of trees: `100` in the originally trained model
 - Input feature count: `7`
 - Training set size: `246,091` records (2.4L+)
-- Evaluation metric: `R² = 0.94` (held-out test split)
+- Evaluation metric: `R² = 0.94` (held-out test split, measured on the full 100-tree model)
 - Encoder class counts:
   - States: `33`
   - Districts: `646`
   - Crops: `124`
   - Seasons: `6`
+
+### Two model files, chosen automatically
+
+`app.py` looks for `yieldsense_model_full.pkl` first (the full 100-tree model) and only falls back to `yieldsense_model.pkl` if that file isn't present:
+
+- **Local development**: keep `yieldsense_model_full.pkl` on disk (gitignored, ~1.65 GB) for full-fidelity predictions. This is what you get by default after cloning and generating/copying in the full model.
+- **Hosted deployment** (e.g. Streamlit Community Cloud): only `yieldsense_model.pkl` is committed to this repo — a 20-tree subset of the exact same fitted trees (no retraining), pruned so the artifact fits within GitHub's 100MB direct-push limit and the free tier's ~1GB RAM ceiling (the full model alone uses ~1.7GB in memory once loaded). Across a 50-row sample, predictions from the pruned model differ from the full model by ~7% on average.
 
 Feature importances (aligned to model feature order):
 
@@ -299,7 +306,7 @@ What can be confirmed from artifacts:
 1. **Encoder dependency**: unseen category labels are unsupported unless encoders are retrained.
 2. **Year extrapolation**: UI allows year up to 2030 while source CSV ends at 2015; future-year predictions are extrapolative.
 3. **Rainfall source**: rainfall is manual input in current app code (no live weather API fetch in `app.py`, despite the "weather-aware" UI copy).
-4. **Large model artifact**: `yieldsense_model.pkl` is ~1.65 GB, so first load may take longer.
+4. **Pruned deployed model**: the repo-tracked `yieldsense_model.pkl` is a 20-tree subset of the original 100-tree model (see section 8); predictions differ from the full model by ~7% on average. The full model is used automatically instead whenever `yieldsense_model_full.pkl` is present locally.
 5. **Production column mismatch**: raw CSV includes `Production`, but the runtime model expects `Rainfall` instead.
 6. **UI "model performance" card**: the sidebar shows the R² score and training set size from offline evaluation; these are fixed values baked into the UI, not recomputed live at runtime.
 
