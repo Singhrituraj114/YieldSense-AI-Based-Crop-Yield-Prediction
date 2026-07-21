@@ -79,6 +79,19 @@ custom_css = """
         75%      { transform: translateY(-20px) translateX(12px); }
     }
 
+    /* ── TOOLBAR / HEADER ── */
+    [data-testid="stHeader"] {
+        background: transparent !important;
+    }
+
+    [data-testid="stToolbar"] button,
+    [data-testid="stToolbar"] span,
+    [data-testid="stToolbar"] svg,
+    [data-testid="stStatusWidget"] * {
+        color: #c8e8c4 !important;
+        fill: #c8e8c4 !important;
+    }
+
     /* ── SIDEBAR ── */
     [data-testid="stSidebar"] {
         background: 
@@ -956,8 +969,10 @@ custom_css = """
         background: rgba(18, 40, 20, 0.8);
         border: 1px solid rgba(94, 166, 78, 0.25);
         border-radius: 12px;
-        padding: 1rem;
+        padding: 1rem 0.5rem;
         text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
     }
 
     .sidebar-feature {
@@ -1025,6 +1040,7 @@ def load_crop_production_data():
         df = pd.read_csv("crop_production.csv")
         df['State_Name']    = df['State_Name'].str.lower().str.strip()
         df['District_Name'] = df['District_Name'].str.lower().str.strip()
+        df['Crop']          = df['Crop'].str.lower().str.strip()
         return df
     except FileNotFoundError as e:
         st.error(f"❌ Error loading crop_production.csv: {e}")
@@ -1065,7 +1081,6 @@ with st.sidebar:
     st.markdown('<p style="color:#7ec86a;font-size:0.78rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:0.6rem;">⚙️ Settings</p>', unsafe_allow_html=True)
 
     show_info  = st.toggle("📊 Show Feature Cards", value=True)
-    theme_mode = st.radio("Theme", ["Forest Dark", "Light"], horizontal=True)
 
     st.divider()
 
@@ -1085,13 +1100,13 @@ with st.sidebar:
         c1, c2 = st.columns(2)
         with c1:
             st.markdown("""<div class="sidebar-stat">
-                <p style="color:#7ec86a;font-size:1.5rem;font-weight:900;margin:0;">95%</p>
-                <p style="color:rgba(200,232,196,0.5);font-size:0.68rem;margin:0;">Accuracy</p>
+                <p style="color:#7ec86a;font-size:1.2rem;font-weight:900;margin:0;">0.94</p>
+                <p style="color:rgba(200,232,196,0.5);font-size:0.68rem;margin:0;">R² Score</p>
             </div>""", unsafe_allow_html=True)
         with c2:
             st.markdown("""<div class="sidebar-stat">
-                <p style="color:#d4a843;font-size:1.5rem;font-weight:900;margin:0;">50K+</p>
-                <p style="color:rgba(200,232,196,0.5);font-size:0.68rem;margin:0;">Predictions</p>
+                <p style="color:#d4a843;font-size:1.2rem;font-weight:900;margin:0;">246K+</p>
+                <p style="color:rgba(200,232,196,0.5);font-size:0.68rem;margin:0;">Records</p>
             </div>""", unsafe_allow_html=True)
 
     with st.expander("💡 Pro Tips", expanded=False):
@@ -1182,7 +1197,18 @@ with col2:
     district = selected_district_display.lower().strip()
 
 with col3:
-    crop_options = [c.title() for c in sorted(le_crop.classes_)]
+    # Filter crops based on selected state (NO UI CHANGE)
+    filtered_crops = crop_data[crop_data['State_Name'] == state]['Crop'].unique()
+
+    # Ensure compatibility with encoder
+    encoder_crops = set(le_crop.classes_)
+    filtered_crops = [c for c in filtered_crops if c.title() in encoder_crops]
+
+    if len(filtered_crops) == 0:
+        st.error("❌ No crops available for this state")
+        st.stop()
+
+    crop_options = [c.title() for c in sorted(filtered_crops)]
     selected_crop_display = st.selectbox("🌱 Select Crop", crop_options, help="Choose the crop type")
     crop = selected_crop_display.lower().strip()
 
@@ -1226,12 +1252,22 @@ st.markdown("""
 
 col1, col2 = st.columns([3, 1])
 with col1:
-    predict_button = st.button("🌾  ANALYSE & PREDICT YIELD", use_container_width=True, key="predict_btn")
+    predict_button = st.button("🌾  ANALYSE & PREDICT YIELD", width="stretch", key="predict_btn")
 with col2:
     st.info("✨ Click to analyse", icon="🌱")
 
 # ==================== PREDICTION LOGIC (UNCHANGED) ====================
 if predict_button:
+    # 🔒 VALIDATION LAYER (NEW - add here)
+    valid_pairs = crop_data[['State_Name', 'Crop']].drop_duplicates()
+
+    if not ((valid_pairs['State_Name'] == state) & (valid_pairs['Crop'] == crop)).any():
+        st.warning("⚠️ This crop-state combination was not seen in training data")
+
+    # 🔥 OPTIONAL: rare data warning
+    combo_count = len(crop_data[(crop_data['State_Name'] == state) & (crop_data['Crop'] == crop)])
+    if combo_count < 5:
+        st.warning("⚠️ Limited historical data for this combination — prediction may be less reliable")
     if area <= 0:
         st.error("❌ Area must be greater than 0 hectares"); st.stop()
     if rainfall <= 0:
@@ -1263,7 +1299,7 @@ if predict_button:
             prediction = model.predict(input_data)[0]
 
             # ── PREDICTION CONFIDENCE ──
-            preds = np.array([tree.predict(input_data)[0] for tree in model.estimators_])
+            preds = np.array([tree.predict(input_data.values)[0] for tree in model.estimators_])
             confidence = np.std(preds)
             confidence_score = max(0, 100 - (confidence * 10))  # Convert to 0-100 scale
 
@@ -1356,7 +1392,7 @@ if predict_button:
     explainer = create_shap_explainer(model)
     if explainer is not None:
         try:
-            shap_values = explainer.shap_values(input_data)
+            shap_values = explainer.shap_values(input_data.values)
             if isinstance(shap_values, list):
                 shap_vals = shap_values[0]
             else:
@@ -1382,7 +1418,7 @@ if predict_button:
                     'Value': '{:.2f}', 'SHAP Impact': '{:.4f}'
                 }).background_gradient(subset=['SHAP Impact'], cmap='Greens',
                     vmin=shap_df['SHAP Impact'].min(), vmax=shap_df['SHAP Impact'].max())
-                st.dataframe(styled_df, use_container_width=True, hide_index=True)
+                st.dataframe(styled_df, width="stretch", hide_index=True)
 
             with tab2:
                 col_pred, col_base = st.columns(2)
@@ -1419,7 +1455,7 @@ if predict_button:
                     'Impact': '{:.4f}', 'Cumulative': '{:.2f}'
                 }).background_gradient(subset=['Impact'], cmap='RdYlGn',
                     vmin=contrib_df['Impact'].min(), vmax=contrib_df['Impact'].max())
-                st.dataframe(styled_contrib, use_container_width=True, hide_index=True)
+                st.dataframe(styled_contrib, width="stretch", hide_index=True)
 
             with tab3:
                 impact_data = pd.DataFrame({
