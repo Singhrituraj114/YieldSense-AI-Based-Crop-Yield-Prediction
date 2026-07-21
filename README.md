@@ -250,19 +250,15 @@ Answers: **Which features matter most overall in the trained model?**
 ## 8) Model and encoder artifact facts (loaded runtime values)
 
 - Model type: `RandomForestRegressor`
-- Number of trees: `100` in the originally trained model; the version tracked in this repo (`yieldsense_model.pkl`) is a pruned 20-tree subset of the same fitted ensemble — see "Deployed model variant" below.
+- Number of trees: `100`
 - Input feature count: `7`
 - Training set size: `246,091` records (2.4L+)
-- Evaluation metric: `R² = 0.94` (held-out test split, measured on the full 100-tree model)
+- Evaluation metric: `R² = 0.94` (held-out test split)
 - Encoder class counts:
   - States: `33`
   - Districts: `646`
   - Crops: `124`
   - Seasons: `6`
-
-### Deployed model variant
-
-`yieldsense_model.pkl` in this repo is not the full 100-tree model — it's a 20-tree subset of the exact same fitted trees (no retraining), pruned so the artifact fits within GitHub's 100MB direct-push limit and Streamlit Community Cloud's ~1GB free-tier RAM ceiling (the full model alone uses ~1.7GB in memory once loaded). Across a 50-row sample, predictions from the pruned model differ from the full model by ~7% on average. The full 100-tree model can be regenerated locally or requested separately if higher fidelity is needed for offline use.
 
 Feature importances (aligned to model feature order):
 
@@ -303,7 +299,7 @@ What can be confirmed from artifacts:
 1. **Encoder dependency**: unseen category labels are unsupported unless encoders are retrained.
 2. **Year extrapolation**: UI allows year up to 2030 while source CSV ends at 2015; future-year predictions are extrapolative.
 3. **Rainfall source**: rainfall is manual input in current app code (no live weather API fetch in `app.py`, despite the "weather-aware" UI copy).
-4. **Pruned deployed model**: `yieldsense_model.pkl` is a 20-tree subset of the original 100-tree model (see section 8), kept small enough for free-tier hosting; predictions differ from the full model by ~7% on average.
+4. **Large model artifact**: `yieldsense_model.pkl` is ~1.65 GB, so first load may take longer.
 5. **Production column mismatch**: raw CSV includes `Production`, but the runtime model expects `Rainfall` instead.
 6. **UI "model performance" card**: the sidebar shows the R² score and training set size from offline evaluation; these are fixed values baked into the UI, not recomputed live at runtime.
 

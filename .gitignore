@@ -5,11 +5,6 @@ venv/
 .env
 .DS_Store
 *.pkl
-!yieldsense_model.pkl
-!yieldsense_le_state.pkl
-!yieldsense_le_district.pkl
-!yieldsense_le_crop.pkl
-!yieldsense_le_season.pkl
 shap_test_visualization.png
 COLOR_FIX.md
 COLORS_FIXED.md
