@@ -4,6 +4,11 @@ from sleeping after inactivity. A plain HTTP request does NOT work for this:
 a sleeping Streamlit Cloud app returns a static HTML shell with a 200 status
 without ever launching the underlying Python app, so only an actual browser
 render (which Streamlit Cloud detects as real traffic) resets the sleep timer.
+
+If an app has already fully hibernated, Streamlit Cloud shows a "wake up"
+splash screen with a "Yes, get this app back up!" button instead of the app
+itself - a plain visit lands on that screen and does nothing, so we have to
+find and click the button to actually trigger the rebuild.
 """
 import sys
 import time
@@ -22,8 +27,15 @@ APP_URLS = [
 def visit(page, url):
     page.goto(url, wait_until="networkidle", timeout=120_000)
 
+    try:
+        wake_button = page.get_by_role("button", name="Yes, get this app back up!")
+        if wake_button.count() > 0:
+            wake_button.click()
+    except Exception:
+        pass
+
     app_frame = None
-    for _ in range(24):  # up to ~2 minutes for a cold start
+    for _ in range(36):  # up to ~3 minutes for a cold start / rebuild from hibernation
         for f in page.frames:
             if "/~/+/" in f.url:
                 app_frame = f
