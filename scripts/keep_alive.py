@@ -35,7 +35,7 @@ def visit(page, url):
         pass
 
     app_frame = None
-    for _ in range(36):  # up to ~3 minutes for a cold start / rebuild from hibernation
+    for _ in range(60):  # up to ~5 minutes for a cold start / rebuild from hibernation
         for f in page.frames:
             if "/~/+/" in f.url:
                 app_frame = f
